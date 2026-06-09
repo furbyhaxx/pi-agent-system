@@ -19,3 +19,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 - Falls back to Pi's native system prompt and notifies the user when template rendering fails.
+- Preserves Pi's native appended prompt, project context, skills, and runtime footer sections when rendering custom `SYSTEM.md` templates.
+- Validates the active custom template source in `/system-prompt:doctor` instead of always rendering the bundled default template.

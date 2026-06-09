@@ -8,7 +8,12 @@ import { buildTemplateContext } from "./context.ts";
 import { buildDefaultPromptParts } from "./default-prompt.ts";
 import { getAgentDir, getPackageRoot, getPartialRoots } from "./paths.ts";
 import { createRenderer } from "./renderer.ts";
-import type { TemplateModelContext, TemplateSessionContext, TemplateToolContext } from "./types.ts";
+import type {
+  SystemPromptTemplateContext,
+  TemplateModelContext,
+  TemplateSessionContext,
+  TemplateToolContext,
+} from "./types.ts";
 
 function currentDate(): string {
   return new Date().toISOString().slice(0, 10);
@@ -55,6 +60,67 @@ async function readPackageVersion(packageRoot: string): Promise<string> {
   return typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
 }
 
+function templateReferences(source: string, markers: readonly string[]): boolean {
+  return markers.some((marker) => source.includes(marker));
+}
+
+function renderCustomPromptWithNativeAppends(
+  source: string,
+  rendered: string,
+  context: SystemPromptTemplateContext,
+): string {
+  const parts = context.defaultPrompt.parts;
+  let prompt = rendered;
+
+  if (
+    context.appendSystemPrompt &&
+    !templateReferences(source, ["appendSystemPrompt", "defaultPrompt.nativeFull"])
+  ) {
+    prompt += `\n\n${context.appendSystemPrompt}`;
+  }
+
+  if (
+    parts.projectContextXml &&
+    !templateReferences(source, [
+      "contextFiles",
+      "defaultPrompt.nativeFull",
+      "defaultPrompt.parts.projectContextXml",
+      "projectContextXml",
+      "pi/project-context",
+    ])
+  ) {
+    prompt += `\n\n${parts.projectContextXml}`;
+  }
+
+  if (
+    parts.skillsXml &&
+    !templateReferences(source, [
+      "defaultPrompt.nativeFull",
+      "defaultPrompt.parts.skillsXml",
+      "skills.xml",
+      "skills.all",
+      "skills.visible",
+      "pi/available-skills",
+    ])
+  ) {
+    prompt += `\n\n${parts.skillsXml}`;
+  }
+
+  if (
+    !templateReferences(source, [
+      "defaultPrompt.nativeFull",
+      "defaultPrompt.parts.runtimeFooter",
+      "runtime.date",
+      "runtime.cwd",
+      "runtime/context",
+    ])
+  ) {
+    prompt += `\n${parts.runtimeFooter}`;
+  }
+
+  return prompt;
+}
+
 /** Register the system prompt template renderer extension. */
 export default function piAgentSystem(pi: ExtensionAPI): void {
   const packageRoot = getPackageRoot(import.meta.url);
@@ -63,55 +129,61 @@ export default function piAgentSystem(pi: ExtensionAPI): void {
   registerSystemPromptCommands(pi, { packageRoot, agentDir });
 
   pi.on("before_agent_start", async (event, ctx) => {
-    const cwd = event.systemPromptOptions.cwd;
-    const date = currentDate();
-    const selectedTools = event.systemPromptOptions.selectedTools ?? pi.getActiveTools();
-    const toolSnippets = event.systemPromptOptions.toolSnippets ?? {};
-    const promptGuidelines = event.systemPromptOptions.promptGuidelines ?? [];
-    const contextFiles = event.systemPromptOptions.contextFiles ?? [];
-    const skills = event.systemPromptOptions.skills ?? [];
-    const defaultPrompt = buildDefaultPromptParts({
-      nativeFull: event.systemPrompt,
-      cwd,
-      date,
-      selectedTools,
-      toolSnippets,
-      promptGuidelines,
-      contextFiles,
-      skills,
-    });
-    const context = buildTemplateContext({
-      piVersion: await readPackageVersion(packageRoot),
-      piDocs: {
-        readme: getReadmePath(),
-        docs: getDocsPath(),
-        examples: getExamplesPath(),
-      },
-      cwd,
-      date,
-      mode: ctx.mode,
-      thinkingLevel: String(pi.getThinkingLevel()),
-      contextUsage: ctx.getContextUsage(),
-      model: toTemplateModelContext(ctx),
-      session: toTemplateSessionContext(ctx),
-      allTools: pi.getAllTools().map(toTemplateToolContext),
-      activeTools: selectedTools,
-      toolSnippets,
-      promptGuidelines,
-      skills,
-      contextFiles,
-      defaultPrompt,
-      appendSystemPrompt: event.systemPromptOptions.appendSystemPrompt,
-    });
-    const templateSource =
-      event.systemPromptOptions.customPrompt ??
-      (await readFile(join(packageRoot, DEFAULT_TEMPLATE_RELATIVE_PATH), "utf8"));
-    const renderer = await createRenderer({
-      partialRoots: getPartialRoots({ packageRoot, agentDir, cwd }),
-    });
-
     try {
-      return { systemPrompt: renderer.render(templateSource, context) };
+      const cwd = event.systemPromptOptions.cwd;
+      const date = currentDate();
+      const selectedTools = event.systemPromptOptions.selectedTools ?? pi.getActiveTools();
+      const toolSnippets = event.systemPromptOptions.toolSnippets ?? {};
+      const promptGuidelines = event.systemPromptOptions.promptGuidelines ?? [];
+      const contextFiles = event.systemPromptOptions.contextFiles ?? [];
+      const skills = event.systemPromptOptions.skills ?? [];
+      const defaultPrompt = buildDefaultPromptParts({
+        nativeFull: event.systemPrompt,
+        cwd,
+        date,
+        selectedTools,
+        toolSnippets,
+        promptGuidelines,
+        contextFiles,
+        skills,
+      });
+      const context = buildTemplateContext({
+        piVersion: await readPackageVersion(packageRoot),
+        piDocs: {
+          readme: getReadmePath(),
+          docs: getDocsPath(),
+          examples: getExamplesPath(),
+        },
+        cwd,
+        date,
+        mode: ctx.mode,
+        thinkingLevel: String(pi.getThinkingLevel()),
+        contextUsage: ctx.getContextUsage(),
+        model: toTemplateModelContext(ctx),
+        session: toTemplateSessionContext(ctx),
+        allTools: pi.getAllTools().map(toTemplateToolContext),
+        activeTools: selectedTools,
+        toolSnippets,
+        promptGuidelines,
+        skills,
+        contextFiles,
+        defaultPrompt,
+        appendSystemPrompt: event.systemPromptOptions.appendSystemPrompt,
+      });
+      const templateSource =
+        event.systemPromptOptions.customPrompt ??
+        (await readFile(join(packageRoot, DEFAULT_TEMPLATE_RELATIVE_PATH), "utf8"));
+      const renderer = await createRenderer({
+        partialRoots: getPartialRoots({ packageRoot, agentDir, cwd }),
+      });
+      const rendered = renderer.render(templateSource, context);
+
+      return {
+        systemPrompt:
+          event.systemPromptOptions.customPrompt === undefined
+            ? rendered
+            : renderCustomPromptWithNativeAppends(templateSource, rendered, context),
+      };
     } catch {
       if (ctx.ui) {
         ctx.ui.notify(

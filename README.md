@@ -10,7 +10,7 @@ pi install git:github.com/furbyhaxx/pi-agent-system
 
 ## What it does
 
-- Treats the loaded `SYSTEM.md` as a Handlebars template before each agent turn.
+- Treats the loaded `SYSTEM.md` as a Handlebars template before each agent turn while preserving Pi's native appended sections for custom prompts.
 - Uses the bundled `templates/default.SYSTEM.md` when no custom `SYSTEM.md` is loaded.
 - Injects a serializable context with Pi metadata, runtime details, model/session data, tools, skills, context files, default prompt parts, and appended system prompt text.
 - Loads reusable partials from bundled, global, and project roots; later roots override earlier roots.
@@ -21,7 +21,7 @@ pi install git:github.com/furbyhaxx/pi-agent-system
 
 - `/system-prompt:preview` — render the current system prompt template and show it in the editor when UI is available.
 - `/system-prompt:vars` — show a redacted JSON snapshot of template variables.
-- `/system-prompt:doctor` — check bundled template/partial files and validate rendering.
+- `/system-prompt:doctor` — check bundled template/partial files and validate rendering of the active template source.
 - `/system-prompt:eject [--project|--global] [--force]` — copy the bundled `SYSTEM.md`, partials, and an ejected-template README into project `.pi/` scope by default, or global agent scope with `--global`; refuse overwrites unless `--force` or confirmed interactively.
 - `/system-prompt:reload` — run Pi's reload flow for extensions, skills, prompts, and themes.
 

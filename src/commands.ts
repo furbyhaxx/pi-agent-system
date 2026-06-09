@@ -287,25 +287,24 @@ export function registerSystemPromptCommands(pi: ExtensionAPI, paths: SystemProm
   });
 
   pi.registerCommand(`${COMMAND_PREFIX}:doctor`, {
-    description: "Validate bundled system prompt template and partials",
+    description: "Validate active system prompt template and partials",
     handler: async (_args, ctx) => {
       const bundledTemplate = join(paths.packageRoot, DEFAULT_TEMPLATE_RELATIVE_PATH);
       const bundledPartials = join(paths.packageRoot, "templates", "partials");
+      const hasCustomPrompt = ctx.getSystemPromptOptions().customPrompt !== undefined;
       const errors: string[] = [];
 
-      if (!(await pathExists(bundledTemplate))) errors.push(`Missing template: ${bundledTemplate}`);
+      if (!hasCustomPrompt && !(await pathExists(bundledTemplate))) errors.push(`Missing template: ${bundledTemplate}`);
       if (!(await pathExists(bundledPartials))) errors.push(`Missing partials: ${bundledPartials}`);
 
-      if (errors.length === 0) {
-        try {
-          const data = await buildCurrentTemplateData(pi, paths, ctx);
-          const renderer = await createRenderer({
-            partialRoots: getPartialRoots({ packageRoot: paths.packageRoot, agentDir: paths.agentDir, cwd: ctx.cwd }),
-          });
-          renderer.render(await readFile(bundledTemplate, "utf8"), data.context);
-        } catch (error) {
-          errors.push(`Render failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
+      try {
+        const data = await buildCurrentTemplateData(pi, paths, ctx);
+        const renderer = await createRenderer({
+          partialRoots: getPartialRoots({ packageRoot: paths.packageRoot, agentDir: paths.agentDir, cwd: ctx.cwd }),
+        });
+        renderer.render(data.source, data.context);
+      } catch (error) {
+        errors.push(`Render failed: ${error instanceof Error ? error.message : String(error)}`);
       }
 
       ctx.ui.notify(
