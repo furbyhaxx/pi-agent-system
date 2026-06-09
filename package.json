@@ -38,7 +38,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test:unit": "tsx tests/renderer.test.ts && tsx tests/default-prompt.test.ts && tsx tests/context.test.ts && tsx tests/paths.test.ts && tsx tests/commands.test.ts",
+    "test:unit": "node --import tsx --test tests/*.test.ts",
     "test:module": "node --import tsx -e \"import('./src/index.ts').then((mod) => { if (typeof mod.default !== 'function') throw new Error('Default export missing.'); })\"",
     "test": "npm run typecheck && npm run test:unit && npm run test:module",
     "build": "npm run typecheck",
