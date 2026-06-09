@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -68,5 +68,61 @@ void describe("createRenderer", () => {
     );
 
     assert.equal(rendered, "fallback read");
+  });
+
+  void it("renders the bundled default system prompt with inherited partial context", async () => {
+    const templateRoot = join(process.cwd(), "templates");
+    const template = await readFile(join(templateRoot, "default.SYSTEM.md"), "utf8");
+    const renderer = await createRenderer({ partialRoots: [join(templateRoot, "partials")] });
+
+    const rendered = renderer.render(template, {
+      appendSystemPrompt: "Append this system prompt.",
+      contextFiles: [{ path: "/repo/AGENTS.md", content: "Project instructions" }],
+      defaultPrompt: {
+        nativeFull: "native prompt",
+        parts: {
+          identity: "identity",
+          availableTools: "tools",
+          guidelines: "guidelines",
+          piDocs: "pi docs",
+          projectContextXml: "<project_context />",
+          skillsXml: "<available_skills><skill name=\"visible-skill\" /></available_skills>",
+          runtimeFooter: "Current date: 2026-06-09\nCurrent working directory: /repo",
+        },
+      },
+      model: { id: "test-model", name: "Test Model", provider: "test-provider" },
+      pi: { packageName: "@furbyhaxx/pi-agent-system", version: "0.1.0", docs: {} },
+      runtime: {
+        cwd: "/repo",
+        date: "2026-06-09",
+        mode: "default",
+        thinkingLevel: "medium",
+        contextUsage: { tokens: 1234, contextWindow: 8000, percent: 0.15425 },
+      },
+      session: { id: "session-123", name: "Bundled template test" },
+      skills: {
+        all: [],
+        visible: [],
+        xml: "<available_skills><skill name=\"visible-skill\" /></available_skills>",
+      },
+      tools: {
+        active: ["read", "bash"],
+        activeDetails: [
+          { name: "read", description: "Read file contents" },
+          { name: "bash", description: "Execute shell commands" },
+        ],
+        all: [],
+        byName: {},
+        snippets: {},
+        guidelines: ["Prefer read for file contents."],
+      },
+    });
+
+    assert.match(rendered, /You are Pi, an AI coding agent/);
+    assert.match(rendered, /Action Safety/);
+    assert.match(rendered, /`read`/);
+    assert.match(rendered, /Current date: 2026-06-09/);
+    assert.match(rendered, /Current working directory: \/repo/);
+    assert.match(rendered, /<available_skills><skill name="visible-skill" \/><\/available_skills>/);
   });
 });
