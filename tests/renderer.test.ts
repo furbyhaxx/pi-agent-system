@@ -125,4 +125,40 @@ void describe("createRenderer", () => {
     assert.match(rendered, /Current working directory: \/repo/);
     assert.match(rendered, /<available_skills><skill name="visible-skill" \/><\/available_skills>/);
   });
+
+  void it("renders the runtime partial when optional live fields are absent", async () => {
+    const templateRoot = join(process.cwd(), "templates");
+    const template = await readFile(join(templateRoot, "default.SYSTEM.md"), "utf8");
+    const renderer = await createRenderer({ partialRoots: [join(templateRoot, "partials")] });
+
+    const rendered = renderer.render(template, {
+      contextFiles: [],
+      defaultPrompt: {
+        nativeFull: "native prompt",
+        parts: {
+          identity: "identity",
+          availableTools: "tools",
+          guidelines: "guidelines",
+          piDocs: "pi docs",
+          projectContextXml: "",
+          skillsXml: "",
+          runtimeFooter: "Current date: 2026-06-09\nCurrent working directory: /repo",
+        },
+      },
+      pi: { packageName: "@furbyhaxx/pi-agent-system", version: "0.1.0", docs: {} },
+      runtime: { cwd: "/repo", date: "2026-06-09" },
+      skills: { all: [], visible: [], xml: "" },
+      tools: {
+        active: [],
+        activeDetails: [],
+        all: [],
+        byName: {},
+        snippets: {},
+        guidelines: [],
+      },
+    });
+
+    assert.match(rendered, /Current date: 2026-06-09/);
+    assert.match(rendered, /Current working directory: \/repo/);
+  });
 });

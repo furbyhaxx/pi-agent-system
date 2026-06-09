@@ -8,3 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 - Initial `pi-agent-system` package plan.
+- System prompt template rendering through Pi's `before_agent_start` hook.
+- Path helpers for global agent directory, package root, and partial precedence.
+
+### Changed
+- Guarded optional runtime template fields for live sessions without model, context usage, or session details.
