@@ -1,0 +1,79 @@
+{
+  "name": "@furbyhaxx/pi-agent-system",
+  "version": "0.1.0",
+  "description": "Pi extension package for Handlebars-rendered SYSTEM.md templates with rich agent context and ejectable defaults.",
+  "type": "module",
+  "license": "MIT",
+  "author": "furbyhaxx",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent",
+    "system-prompt",
+    "handlebars",
+    "prompt-template"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/furbyhaxx/pi-agent-system.git"
+  },
+  "bugs": {
+    "url": "https://github.com/furbyhaxx/pi-agent-system/issues"
+  },
+  "homepage": "https://github.com/furbyhaxx/pi-agent-system#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src/",
+    "templates/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "AGENTS.md",
+    "package.json"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:unit": "tsx tests/renderer.test.ts && tsx tests/default-prompt.test.ts && tsx tests/context.test.ts && tsx tests/paths.test.ts && tsx tests/commands.test.ts",
+    "test:module": "node --import tsx -e \"import('./src/index.ts').then((mod) => { if (typeof mod.default !== 'function') throw new Error('Default export missing.'); })\"",
+    "test": "npm run typecheck && npm run test:unit && npm run test:module",
+    "build": "npm run typecheck",
+    "pack:dry": "npm pack --dry-run"
+  },
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "dependencies": {
+    "handlebars": "^4.7.9"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-agent-core": "*",
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-agent-core": { "optional": true },
+    "@earendil-works/pi-ai": { "optional": true },
+    "@earendil-works/pi-coding-agent": { "optional": true },
+    "@earendil-works/pi-tui": { "optional": true },
+    "typebox": { "optional": true }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-agent-core": "^0.79.0",
+    "@earendil-works/pi-ai": "^0.79.0",
+    "@earendil-works/pi-coding-agent": "^0.79.0",
+    "@earendil-works/pi-tui": "^0.79.0",
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typebox": "^1.1.38",
+    "typescript": "^6.0.3"
+  }
+}
