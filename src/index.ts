@@ -64,6 +64,14 @@ function templateReferences(source: string, markers: readonly string[]): boolean
   return markers.some((marker) => source.includes(marker));
 }
 
+function getTerminalContext(mode: string): { width?: number; height?: number } | undefined {
+  if (mode !== "tui") return undefined;
+  return {
+    width: process.stdout.columns,
+    height: process.stdout.rows,
+  };
+}
+
 function renderCustomPromptWithNativeAppends(
   source: string,
   rendered: string,
@@ -158,6 +166,7 @@ export default function piAgentSystem(pi: ExtensionAPI): void {
         date,
         mode: ctx.mode,
         thinkingLevel: String(pi.getThinkingLevel()),
+        terminal: getTerminalContext(ctx.mode),
         contextUsage: ctx.getContextUsage(),
         model: toTemplateModelContext(ctx),
         session: toTemplateSessionContext(ctx),

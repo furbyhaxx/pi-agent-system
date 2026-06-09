@@ -90,14 +90,22 @@ void describe("createRenderer", () => {
           runtimeFooter: "Current date: 2026-06-09\nCurrent working directory: /repo",
         },
       },
-      model: { id: "test-model", name: "Test Model", provider: "test-provider" },
+      model: {
+        id: "test-model",
+        name: "Test Model",
+        provider: "test-provider",
+        contextWindow: 500000,
+      },
       pi: { packageName: "@furbyhaxx/pi-agent-system", version: "0.1.0", docs: {} },
       runtime: {
         cwd: "/repo",
         date: "2026-06-09",
-        mode: "default",
+        mode: "tui",
         thinkingLevel: "medium",
-        contextUsage: { tokens: 1234, contextWindow: 8000, percent: 0.15425 },
+        contextUsage: { tokens: null, contextWindow: 500000, percent: null },
+        terminal: { width: 120, height: 40 },
+        modeDisplay: "tui (120x40)",
+        contextUsageDisplay: { tokens: "?", contextWindow: "500000", percent: "?" },
       },
       session: { id: "session-123", name: "Bundled template test" },
       skills: {
@@ -108,8 +116,16 @@ void describe("createRenderer", () => {
       tools: {
         active: ["read", "bash"],
         activeDetails: [
-          { name: "read", description: "Read file contents" },
-          { name: "bash", description: "Execute shell commands" },
+          {
+            name: "read",
+            description: "Read file contents",
+            promptGuidelines: ["Use read to inspect files instead of shelling out."],
+          },
+          {
+            name: "bash",
+            description: "Execute shell commands",
+            promptGuidelines: ["Inspect before running risky commands."],
+          },
         ],
         all: [],
         byName: {},
@@ -120,7 +136,16 @@ void describe("createRenderer", () => {
 
     assert.match(rendered, /You are Pi, an AI coding agent/);
     assert.match(rendered, /Action Safety/);
-    assert.match(rendered, /`read`/);
+    assert.match(rendered, /# Tool Usage Guidelines/);
+    assert.match(rendered, /## `read`/);
+    assert.match(rendered, /Use read to inspect files instead of shelling out\./);
+    assert.match(rendered, /## `bash`/);
+    assert.match(rendered, /Inspect before running risky commands\./);
+    assert.match(rendered, /Mode: tui \(120x40\)/);
+    assert.match(rendered, /Context usage: \? \/ 500000 tokens \(\?\)/);
+    assert.doesNotMatch(rendered, /Pi package:/);
+    assert.doesNotMatch(rendered, /# Active Pi Tools/);
+    assert.doesNotMatch(rendered, /# Tool Guidelines/);
     assert.match(rendered, /Current date: 2026-06-09/);
     assert.match(rendered, /Current working directory: \/repo/);
     assert.match(rendered, /<available_skills><skill name="visible-skill" \/><\/available_skills>/);
@@ -146,7 +171,14 @@ void describe("createRenderer", () => {
         },
       },
       pi: { packageName: "@furbyhaxx/pi-agent-system", version: "0.1.0", docs: {} },
-      runtime: { cwd: "/repo", date: "2026-06-09" },
+      runtime: {
+        cwd: "/repo",
+        date: "2026-06-09",
+        mode: "tui",
+        terminal: {},
+        modeDisplay: "tui (?x?)",
+        contextUsageDisplay: { tokens: "?", contextWindow: "?", percent: "?" },
+      },
       skills: { all: [], visible: [], xml: "" },
       tools: {
         active: [],
@@ -160,5 +192,8 @@ void describe("createRenderer", () => {
 
     assert.match(rendered, /Current date: 2026-06-09/);
     assert.match(rendered, /Current working directory: \/repo/);
+    assert.match(rendered, /Mode: tui \(\?x\?\)/);
+    assert.match(rendered, /Context usage: \? \/ \? tokens \(\?\)/);
+    assert.doesNotMatch(rendered, /Pi package:/);
   });
 });

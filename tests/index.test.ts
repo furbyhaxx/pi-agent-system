@@ -81,6 +81,80 @@ void describe("piAgentSystem", () => {
     assert.ok(systemPrompt.indexOf("<available_skills>") < systemPrompt.indexOf("Current date:"));
   });
 
+  void it("renders bundled runtime and tool sections with TUI size and placeholders", async () => {
+    let beforeAgentStartHandler: BeforeAgentStartHandler | undefined;
+    const pi = {
+      on(event: string, handler: BeforeAgentStartHandler): void {
+        if (event === "before_agent_start") {
+          beforeAgentStartHandler = handler;
+        }
+      },
+      getActiveTools: () => ["read", "bash"],
+      getAllTools: () => [
+        {
+          name: "read",
+          description: "Read file contents",
+          promptGuidelines: ["Use read to inspect files instead of shelling out."],
+        },
+        {
+          name: "bash",
+          description: "Execute shell commands",
+          promptGuidelines: ["Inspect before running risky commands."],
+        },
+      ],
+      getThinkingLevel: () => "medium",
+      registerCommand: () => undefined,
+    };
+    piAgentSystem(pi as unknown as ExtensionAPI);
+
+    assert.ok(beforeAgentStartHandler);
+
+    const stdout = process.stdout as typeof process.stdout & { columns?: number; rows?: number };
+    const originalColumns = stdout.columns;
+    const originalRows = stdout.rows;
+    stdout.columns = 120;
+    stdout.rows = 40;
+
+    try {
+      const result = await beforeAgentStartHandler(
+        {
+          type: "before_agent_start",
+          prompt: "hello",
+          systemPrompt: "Pi native system prompt",
+          systemPromptOptions: {
+            cwd: process.cwd(),
+            selectedTools: ["read", "bash"],
+            toolSnippets: { read: "Read files", bash: "Run commands" },
+          },
+        },
+        {
+          mode: "tui",
+          getContextUsage: () => ({ tokens: null, contextWindow: 500000, percent: null }),
+          model: { provider: "openai-codex", contextWindow: 500000 },
+          sessionManager: {
+            getSessionId: () => "session-789",
+            getSessionName: () => "Bundled prompt test",
+          },
+        },
+      );
+
+      assert.ok(result);
+      const systemPrompt = result.systemPrompt;
+      assert.ok(typeof systemPrompt === "string");
+      assert.match(systemPrompt, /Mode: tui \(120x40\)/);
+      assert.match(systemPrompt, /Context usage: \? \/ 500000 tokens \(\?\)/);
+      assert.match(systemPrompt, /# Tool Usage Guidelines/);
+      assert.match(systemPrompt, /## `read`/);
+      assert.match(systemPrompt, /Use read to inspect files instead of shelling out\./);
+      assert.match(systemPrompt, /## `bash`/);
+      assert.match(systemPrompt, /Inspect before running risky commands\./);
+      assert.doesNotMatch(systemPrompt, /Pi package:/);
+    } finally {
+      stdout.columns = originalColumns;
+      stdout.rows = originalRows;
+    }
+  });
+
   void it("falls back to the native prompt and notifies when template rendering fails", async () => {
     let beforeAgentStartHandler: BeforeAgentStartHandler | undefined;
     const pi = {

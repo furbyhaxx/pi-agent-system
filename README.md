@@ -12,6 +12,8 @@ pi install git:github.com/furbyhaxx/pi-agent-system
 
 - Treats the loaded `SYSTEM.md` as a Handlebars template before each agent turn while preserving Pi's native appended sections for custom prompts.
 - Uses the bundled `templates/default.SYSTEM.md` when no custom `SYSTEM.md` is loaded.
+- The bundled runtime section shows TUI terminal size when available and uses `?` placeholders instead of blank context-usage fields.
+- The bundled tool section renders `Tool Usage Guidelines` with one subsection per active tool and that tool's own prompt guidelines.
 - Injects a serializable context with Pi metadata, runtime details, model/session data, tools, skills, context files, default prompt parts, and appended system prompt text.
 - Loads reusable partials from bundled, global, and project roots; later roots override earlier roots.
 - Provides `/system-prompt:*` commands to preview, inspect, validate, eject, and reload prompt templates.
@@ -30,10 +32,10 @@ pi install git:github.com/furbyhaxx/pi-agent-system
 Templates receive a plain JSON-safe object with these top-level keys:
 
 - `pi` — package metadata and Pi documentation paths: `packageName`, `version`, and `docs`.
-- `runtime` — current `cwd`, `date`, optional `mode`, optional `thinkingLevel`, and optional `contextUsage`.
+- `runtime` — current `cwd`, `date`, optional `mode`, optional `thinkingLevel`, optional `terminal` dimensions, optional raw `contextUsage`, plus bundled-template-friendly `modeDisplay` and `contextUsageDisplay` values.
 - `model` — active model metadata when available: `id`, `name`, `api`, `provider`, `reasoning`, `input`, `cost`, `contextWindow`, and `maxTokens`.
 - `session` — current session metadata when available, including `id` and `name`.
-- `tools` — active tool names, all tool details, active tool details, `byName` lookup, prompt `snippets`, and tool `guidelines`.
+- `tools` — active tool names, all tool details, normalized active tool details (with per-tool `promptGuidelines`), `byName` lookup, prompt `snippets`, and aggregated tool `guidelines`.
 - `skills` — all loaded skills, model-visible skills, and formatted skills XML.
 - `contextFiles` — loaded project context files with `path` and `content`.
 - `defaultPrompt` — Pi's native prompt as `nativeFull` plus reusable `parts`: `identity`, `availableTools`, `guidelines`, `piDocs`, `projectContextXml`, `skillsXml`, and `runtimeFooter`.

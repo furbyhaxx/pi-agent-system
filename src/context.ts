@@ -1,5 +1,6 @@
 import { PACKAGE_NAME } from "./constants.ts";
 import type {
+  ActiveToolTemplateContext,
   BuildTemplateContextInput,
   SystemPromptTemplateContext,
 } from "./types.ts";
@@ -7,6 +8,29 @@ import type {
 /** Convert rich runtime values into plain JSON-safe template data. */
 export function sanitizeForTemplate<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function displayValue(value: number | string | null | undefined): string {
+  return value === undefined || value === null || value === "" ? "?" : String(value);
+}
+
+function buildModeDisplay(input: BuildTemplateContextInput): string | undefined {
+  if (!input.mode) return undefined;
+  if (input.mode !== "tui") return input.mode;
+
+  return `tui (${displayValue(input.terminal?.width)}x${displayValue(input.terminal?.height)})`;
+}
+
+function buildContextUsageDisplay(input: BuildTemplateContextInput): {
+  tokens: string;
+  contextWindow: string;
+  percent: string;
+} {
+  return {
+    tokens: displayValue(input.contextUsage?.tokens),
+    contextWindow: displayValue(input.contextUsage?.contextWindow ?? input.model?.contextWindow),
+    percent: displayValue(input.contextUsage?.percent),
+  };
 }
 
 /** Build the full Handlebars context used by SYSTEM.md templates. */
@@ -21,17 +45,25 @@ export function buildTemplateContext(
     promptGuidelines: tool.promptGuidelines ?? [],
     sourceInfo: tool.sourceInfo,
   }));
-  const activeTools = input.activeTools.map(
-    (name) => allTools.find((tool) => tool.name === name) ?? { name },
-  );
+  const activeTools: ActiveToolTemplateContext[] = input.activeTools.map((name) => {
+    const tool = allTools.find((entry) => entry.name === name);
+    return {
+      name,
+      description: tool?.description,
+      promptGuidelines: tool?.promptGuidelines ?? [],
+    };
+  });
   const context = {
     pi: { packageName: PACKAGE_NAME, version: input.piVersion, docs: input.piDocs },
     runtime: {
       cwd: input.cwd,
       date: input.date,
       mode: input.mode,
+      modeDisplay: buildModeDisplay(input),
       thinkingLevel: input.thinkingLevel,
+      terminal: input.terminal,
       contextUsage: input.contextUsage,
+      contextUsageDisplay: buildContextUsageDisplay(input),
     },
     model: model
       ? {

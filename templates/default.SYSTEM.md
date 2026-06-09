@@ -16,8 +16,6 @@
 
 {{> pi/default-tools}}
 
-{{> pi/default-guidelines}}
-
 {{#if appendSystemPrompt}}
 {{{appendSystemPrompt}}}
 {{/if}}

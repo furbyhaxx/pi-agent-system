@@ -86,6 +86,24 @@ export interface TemplateSessionContext {
   [key: string]: unknown;
 }
 
+/** Terminal dimensions exposed to templates when available. */
+export interface TemplateTerminalContext {
+  /** Current terminal width in columns. */
+  width?: number;
+  /** Current terminal height in rows. */
+  height?: number;
+}
+
+/** Display-friendly context usage values for bundled templates. */
+export interface TemplateContextUsageDisplay {
+  /** Context token count or placeholder. */
+  tokens: string;
+  /** Context window size or placeholder. */
+  contextWindow: string;
+  /** Context usage percent or placeholder. */
+  percent: string;
+}
+
 /** Serializable tool metadata exposed to templates. */
 export interface TemplateToolContext {
   /** Tool name. */
@@ -98,6 +116,16 @@ export interface TemplateToolContext {
   promptGuidelines?: readonly string[];
   /** Source metadata for extension-provided tools. */
   sourceInfo?: SourceInfo;
+}
+
+/** Active tool details normalized for bundled prompt rendering. */
+export interface ActiveToolTemplateContext {
+  /** Tool name. */
+  name: string;
+  /** Tool description, when available. */
+  description?: string;
+  /** Tool-specific prompt guidelines, or an empty list when none were provided. */
+  promptGuidelines: readonly string[];
 }
 
 /** Input data used to build the full Handlebars system prompt context. */
@@ -114,6 +142,8 @@ export interface BuildTemplateContextInput {
   mode?: string;
   /** Active thinking level, when available. */
   thinkingLevel?: string;
+  /** Current terminal size when running in TUI mode. */
+  terminal?: TemplateTerminalContext;
   /** Current context usage, when available. */
   contextUsage?: ContextUsage;
   /** Active model metadata, when available. */
@@ -147,8 +177,14 @@ export interface SystemPromptTemplateContext {
     cwd: string;
     date: string;
     mode?: string;
+    /** Display-oriented mode string for bundled templates. */
+    modeDisplay?: string;
     thinkingLevel?: string;
+    /** Current terminal size when available. */
+    terminal?: TemplateTerminalContext;
     contextUsage?: ContextUsage;
+    /** Display-oriented context usage strings for bundled templates. */
+    contextUsageDisplay: TemplateContextUsageDisplay;
   };
   /** Active model metadata, when available. */
   model?: TemplateModelContext;
@@ -158,7 +194,7 @@ export interface SystemPromptTemplateContext {
   tools: {
     active: readonly string[];
     all: readonly TemplateToolContext[];
-    activeDetails: readonly Partial<TemplateToolContext>[];
+    activeDetails: readonly ActiveToolTemplateContext[];
     byName: Record<string, TemplateToolContext>;
     snippets: Record<string, string>;
     guidelines: readonly string[];

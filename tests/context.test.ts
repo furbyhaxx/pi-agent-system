@@ -106,7 +106,10 @@ void describe("buildTemplateContext", () => {
       ["read", "bash", "write"],
     );
     assert.equal(context.tools.activeDetails[0]?.description, "Read files");
-    assert.deepEqual(context.tools.activeDetails[2], { name: "missing-active" });
+    assert.deepEqual(context.tools.activeDetails[2], {
+      name: "missing-active",
+      promptGuidelines: [],
+    });
     assert.equal(context.tools.byName.read.description, "Read files");
     assert.deepEqual(context.tools.snippets, input.toolSnippets);
     assert.deepEqual(context.tools.guidelines, ["Prefer rg over grep."]);
@@ -124,6 +127,70 @@ void describe("buildTemplateContext", () => {
     ]);
     assert.deepEqual(context.defaultPrompt, input.defaultPrompt);
     assert.equal(context.appendSystemPrompt, "Append this system prompt.");
+  });
+
+  void it("normalizes runtime display values and active tool guideline defaults", () => {
+    const input = {
+      piVersion: "0.79.0",
+      piDocs: { readme: "/pi/README.md", docs: "/pi/docs", examples: "/pi/examples" },
+      cwd: "/repo",
+      date: "2026-06-09",
+      mode: "tui",
+      thinkingLevel: "high",
+      contextUsage: { tokens: null, contextWindow: 500000, percent: null },
+      model: {
+        id: "gpt-5.4",
+        provider: "openai-codex",
+        contextWindow: 500000,
+      },
+      session: { id: "session-456", name: "Display context" },
+      allTools: [
+        {
+          name: "read",
+          description: "Read files",
+          promptGuidelines: ["Use read for file contents."],
+        },
+      ],
+      activeTools: ["read", "write"],
+      toolSnippets: {},
+      promptGuidelines: [],
+      skills: [],
+      contextFiles: [],
+      defaultPrompt: {
+        nativeFull: "native prompt",
+        parts: {
+          identity: "identity",
+          availableTools: "tools",
+          guidelines: "guidelines",
+          piDocs: "pi docs",
+          projectContextXml: "",
+          skillsXml: "",
+          runtimeFooter: "Current date: 2026-06-09\nCurrent working directory: /repo",
+        },
+      },
+      terminal: { width: 120, height: 40 },
+    } as unknown as BuildTemplateContextInput;
+
+    const context = buildTemplateContext(input);
+    const runtime = context.runtime as typeof context.runtime & {
+      terminal?: { width?: number; height?: number };
+      modeDisplay?: string;
+      contextUsageDisplay?: { tokens: string; contextWindow: string; percent: string };
+    };
+
+    assert.equal(runtime.terminal?.width, 120);
+    assert.equal(runtime.terminal?.height, 40);
+    assert.equal(runtime.modeDisplay, "tui (120x40)");
+    assert.deepEqual(runtime.contextUsageDisplay, {
+      tokens: "?",
+      contextWindow: "500000",
+      percent: "?",
+    });
+    assert.deepEqual(context.tools.activeDetails[0]?.promptGuidelines, ["Use read for file contents."]);
+    assert.deepEqual(context.tools.activeDetails[1], {
+      name: "write",
+      promptGuidelines: [],
+    });
   });
 });
 
