@@ -20,6 +20,7 @@ void describe("piAgentSystem", () => {
       getActiveTools: () => [],
       getAllTools: () => [],
       getThinkingLevel: () => "medium",
+      registerCommand: () => undefined,
     };
     piAgentSystem(pi as unknown as ExtensionAPI);
 

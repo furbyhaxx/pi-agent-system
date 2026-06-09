@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
 import { getDocsPath, getExamplesPath, getReadmePath } from "@earendil-works/pi-coding-agent";
+import { registerSystemPromptCommands } from "./commands.ts";
 import { DEFAULT_TEMPLATE_RELATIVE_PATH } from "./constants.ts";
 import { buildTemplateContext } from "./context.ts";
 import { buildDefaultPromptParts } from "./default-prompt.ts";
@@ -56,8 +57,12 @@ async function readPackageVersion(packageRoot: string): Promise<string> {
 
 /** Register the system prompt template renderer extension. */
 export default function piAgentSystem(pi: ExtensionAPI): void {
+  const packageRoot = getPackageRoot(import.meta.url);
+  const agentDir = getAgentDir();
+
+  registerSystemPromptCommands(pi, { packageRoot, agentDir });
+
   pi.on("before_agent_start", async (event, ctx) => {
-    const packageRoot = getPackageRoot(import.meta.url);
     const cwd = event.systemPromptOptions.cwd;
     const date = currentDate();
     const selectedTools = event.systemPromptOptions.selectedTools ?? pi.getActiveTools();
@@ -102,7 +107,7 @@ export default function piAgentSystem(pi: ExtensionAPI): void {
       event.systemPromptOptions.customPrompt ??
       (await readFile(join(packageRoot, DEFAULT_TEMPLATE_RELATIVE_PATH), "utf8"));
     const renderer = await createRenderer({
-      partialRoots: getPartialRoots({ packageRoot, agentDir: getAgentDir(), cwd }),
+      partialRoots: getPartialRoots({ packageRoot, agentDir, cwd }),
     });
 
     try {
