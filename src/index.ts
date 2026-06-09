@@ -105,6 +105,15 @@ export default function piAgentSystem(pi: ExtensionAPI): void {
       partialRoots: getPartialRoots({ packageRoot, agentDir: getAgentDir(), cwd }),
     });
 
-    return { systemPrompt: renderer.render(templateSource, context) };
+    try {
+      return { systemPrompt: renderer.render(templateSource, context) };
+    } catch {
+      if (ctx.ui) {
+        ctx.ui.notify(
+          "System prompt template render failed; falling back to Pi default prompt.",
+        );
+      }
+      return { systemPrompt: event.systemPrompt };
+    }
   });
 }
