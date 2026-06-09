@@ -155,6 +155,79 @@ void describe("piAgentSystem", () => {
     }
   });
 
+  void it("falls back to COLUMNS and LINES when stdout terminal size is unavailable", async () => {
+    let beforeAgentStartHandler: BeforeAgentStartHandler | undefined;
+    const pi = {
+      on(event: string, handler: BeforeAgentStartHandler): void {
+        if (event === "before_agent_start") {
+          beforeAgentStartHandler = handler;
+        }
+      },
+      getActiveTools: () => ["read"],
+      getAllTools: () => [
+        {
+          name: "read",
+          description: "Read file contents",
+          promptGuidelines: ["Use read to inspect files."],
+        },
+      ],
+      getThinkingLevel: () => "medium",
+      registerCommand: () => undefined,
+    };
+    piAgentSystem(pi as unknown as ExtensionAPI);
+
+    assert.ok(beforeAgentStartHandler);
+
+    const stdout = process.stdout as unknown as {
+      columns: number | undefined;
+      rows: number | undefined;
+    };
+    const originalColumns = stdout.columns;
+    const originalRows = stdout.rows;
+    const originalEnvColumns = process.env.COLUMNS;
+    const originalEnvLines = process.env.LINES;
+    stdout.columns = undefined;
+    stdout.rows = undefined;
+    process.env.COLUMNS = "214";
+    process.env.LINES = "62";
+
+    try {
+      const result = await beforeAgentStartHandler(
+        {
+          type: "before_agent_start",
+          prompt: "hello",
+          systemPrompt: "Pi native system prompt",
+          systemPromptOptions: {
+            cwd: process.cwd(),
+            selectedTools: ["read"],
+            toolSnippets: { read: "Read files" },
+          },
+        },
+        {
+          mode: "tui",
+          getContextUsage: () => ({ tokens: null, contextWindow: 500000, percent: null }),
+          model: { provider: "openai-codex", contextWindow: 500000 },
+          sessionManager: {
+            getSessionId: () => "session-env-size",
+            getSessionName: () => "Env size fallback test",
+          },
+        },
+      );
+
+      assert.ok(result);
+      const systemPrompt = result.systemPrompt;
+      assert.ok(typeof systemPrompt === "string");
+      assert.match(systemPrompt, /Mode: tui \(214x62\)/);
+    } finally {
+      stdout.columns = originalColumns;
+      stdout.rows = originalRows;
+      if (originalEnvColumns === undefined) delete process.env.COLUMNS;
+      else process.env.COLUMNS = originalEnvColumns;
+      if (originalEnvLines === undefined) delete process.env.LINES;
+      else process.env.LINES = originalEnvLines;
+    }
+  });
+
   void it("falls back to the native prompt and notifies when template rendering fails", async () => {
     let beforeAgentStartHandler: BeforeAgentStartHandler | undefined;
     const pi = {

@@ -64,11 +64,20 @@ function templateReferences(source: string, markers: readonly string[]): boolean
   return markers.some((marker) => source.includes(marker));
 }
 
+function resolveTerminalDimension(
+  liveValue: number | undefined,
+  envValue: string | undefined,
+): number | undefined {
+  if (typeof liveValue === "number" && liveValue > 0) return liveValue;
+  const parsed = Number(envValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function getTerminalContext(mode: string): { width?: number; height?: number } | undefined {
   if (mode !== "tui") return undefined;
   return {
-    width: process.stdout.columns,
-    height: process.stdout.rows,
+    width: resolveTerminalDimension(process.stdout.columns, process.env.COLUMNS),
+    height: resolveTerminalDimension(process.stdout.rows, process.env.LINES),
   };
 }
 
