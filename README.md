@@ -16,7 +16,7 @@ pi install git:github.com/furbyhaxx/pi-agent-system
 - The bundled tool section renders `Tool Usage Guidelines` with one subsection per active tool and that tool's own prompt guidelines.
 - Injects a serializable context with Pi metadata, runtime details, model/session data, tools, skills, context files, default prompt parts, and appended system prompt text.
 - Loads reusable partials from bundled, global, and project roots; later roots override earlier roots.
-- Provides `/system-prompt:*` commands to preview, inspect, validate, eject, and reload prompt templates.
+- Provides `/system-prompt:*` commands to preview, inspect, validate, eject, and reload prompt templates using the same runtime-context shaping as live prompt rendering.
 - If template rendering fails, Pi is notified and the native system prompt is used for that turn.
 
 ## Commands

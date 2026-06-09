@@ -279,6 +279,71 @@ void describe("piAgentSystem", () => {
     ]);
   });
 
+  void it("preview renders TUI terminal size through the command render path", async () => {
+    const commands = new Map<string, RegisteredCommand>();
+    const pi = {
+      on: () => undefined,
+      getActiveTools: () => ["read"],
+      getAllTools: () => [
+        {
+          name: "read",
+          description: "Read file contents",
+          promptGuidelines: ["Use read to inspect files."],
+        },
+      ],
+      getThinkingLevel: () => "medium",
+      registerCommand(name: string, command: RegisteredCommand): void {
+        commands.set(name, command);
+      },
+    };
+    piAgentSystem(pi as unknown as ExtensionAPI);
+
+    const preview = commands.get("system-prompt:preview");
+    assert.ok(preview);
+
+    const stdout = process.stdout as typeof process.stdout & { columns?: number; rows?: number };
+    const originalColumns = stdout.columns;
+    const originalRows = stdout.rows;
+    stdout.columns = 214;
+    stdout.rows = 62;
+
+    const editors: Array<{ title: string; content: string }> = [];
+
+    try {
+      await preview.handler("", {
+        cwd: process.cwd(),
+        hasUI: true,
+        mode: "tui",
+        ui: {
+          editor(title: string, content: string): Promise<string | undefined> {
+            editors.push({ title, content });
+            return Promise.resolve(undefined);
+          },
+          notify: () => undefined,
+        },
+        getSystemPromptOptions: () => ({
+          cwd: process.cwd(),
+          selectedTools: ["read"],
+          toolSnippets: { read: "Read files" },
+        }),
+        getSystemPrompt: () => "Pi native system prompt",
+        getContextUsage: () => ({ tokens: null, contextWindow: 500000, percent: null }),
+        model: { provider: "openai-codex", contextWindow: 500000 },
+        sessionManager: {
+          getSessionId: () => "session-preview",
+          getSessionName: () => "Preview test",
+        },
+      });
+    } finally {
+      stdout.columns = originalColumns;
+      stdout.rows = originalRows;
+    }
+
+    assert.equal(editors.length, 1);
+    assert.equal(editors[0]?.title, "Rendered system prompt");
+    assert.match(editors[0]?.content ?? "", /Mode: tui \(214x62\)/);
+  });
+
   void it("doctor validates the active custom prompt source", async () => {
     const commands = new Map<string, RegisteredCommand>();
     const pi = {

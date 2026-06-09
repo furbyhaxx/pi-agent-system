@@ -24,3 +24,4 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Shows TUI terminal size in the bundled runtime section and uses `?` placeholders instead of blank context-usage values.
 - Removes the bundled `Pi package: ...` line from the default runtime section.
 - Replaces the disconnected bundled tool list and guideline list with per-tool `Tool Usage Guidelines` subsections for active tools.
+- Aligns `/system-prompt:preview`, `/system-prompt:vars`, and `/system-prompt:doctor` with live prompt rendering for TUI terminal-size context.

@@ -58,6 +58,23 @@ function currentDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function resolveTerminalDimension(
+  liveValue: number | undefined,
+  envValue: string | undefined,
+): number | undefined {
+  if (typeof liveValue === "number" && liveValue > 0) return liveValue;
+  const parsed = Number(envValue);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function getTerminalContext(mode: string): { width?: number; height?: number } | undefined {
+  if (mode !== "tui") return undefined;
+  return {
+    width: resolveTerminalDimension(process.stdout.columns, process.env.COLUMNS),
+    height: resolveTerminalDimension(process.stdout.rows, process.env.LINES),
+  };
+}
+
 function toTemplateModelContext(ctx: ExtensionCommandContext): TemplateModelContext | undefined {
   const model = ctx.model;
   if (!model) return undefined;
@@ -138,6 +155,7 @@ async function buildCurrentTemplateData(
       date,
       mode: ctx.mode,
       thinkingLevel: String(pi.getThinkingLevel()),
+      terminal: getTerminalContext(ctx.mode),
       contextUsage: ctx.getContextUsage(),
       model: toTemplateModelContext(ctx),
       session: toTemplateSessionContext(ctx),
