@@ -1,4 +1,4 @@
-/** Package npm name. */
+/** Extension package npm name. */
 export const PACKAGE_NAME = "@furbyhaxx/pi-agent-system";
 
 /** Extension command namespace without the leading slash. */

@@ -1,10 +1,11 @@
 import { cp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ToolInfo } from "@earendil-works/pi-coding-agent";
 import { getDocsPath, getExamplesPath, getReadmePath } from "@earendil-works/pi-coding-agent";
 import { COMMAND_PREFIX, DEFAULT_TEMPLATE_RELATIVE_PATH, USER_PARTIALS_DIR } from "./constants.ts";
 import { buildTemplateContext } from "./context.ts";
 import { buildDefaultPromptParts } from "./default-prompt.ts";
+import { discoverAppendSources, getGitContext, getHostContext } from "./environment.ts";
 import { getPartialRoots } from "./paths.ts";
 import { createRenderer } from "./renderer.ts";
 import type {
@@ -14,9 +15,6 @@ import type {
   TemplateSessionContext,
   TemplateToolContext,
 } from "./types.ts";
-
-const SNAPSHOT_STRING_LIMIT = 500;
-const SECRET_KEY_PATTERN = /(?:api|auth|password|secret|token|key|credential|header)/i;
 
 /** Paths required by the system prompt command namespace. */
 export interface SystemPromptCommandPaths {
@@ -109,11 +107,19 @@ function toTemplateToolContext(tool: ToolInfo): TemplateToolContext {
   };
 }
 
-async function readPackageVersion(packageRoot: string): Promise<string> {
-  const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")) as {
-    version?: unknown;
-  };
-  return typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
+async function readPiPackageInfo(): Promise<{ packageName: string; version: string }> {
+  try {
+    const packageJson = JSON.parse(await readFile(join(dirname(getReadmePath()), "package.json"), "utf8")) as {
+      name?: unknown;
+      version?: unknown;
+    };
+    return {
+      packageName: typeof packageJson.name === "string" ? packageJson.name : "@earendil-works/pi-coding-agent",
+      version: typeof packageJson.version === "string" ? packageJson.version : "0.0.0",
+    };
+  } catch {
+    return { packageName: "@earendil-works/pi-coding-agent", version: "0.0.0" };
+  }
 }
 
 async function buildCurrentTemplateData(
@@ -140,12 +146,15 @@ async function buildCurrentTemplateData(
     skills,
   });
 
+  const piPackage = await readPiPackageInfo();
+
   return {
     source:
       options.customPrompt ??
       (await readFile(join(paths.packageRoot, DEFAULT_TEMPLATE_RELATIVE_PATH), "utf8")),
     context: buildTemplateContext({
-      piVersion: await readPackageVersion(paths.packageRoot),
+      piPackageName: piPackage.packageName,
+      piVersion: piPackage.version,
       piDocs: {
         readme: getReadmePath(),
         docs: getDocsPath(),
@@ -167,44 +176,49 @@ async function buildCurrentTemplateData(
       contextFiles,
       defaultPrompt,
       appendSystemPrompt: options.appendSystemPrompt,
+      agentDir: paths.agentDir,
+      host: getHostContext(),
+      git: getGitContext(cwd),
+      appendSources: await discoverAppendSources({ cwd, agentDir: paths.agentDir }),
     }),
   };
 }
 
-function redactValue(value: unknown, key = ""): unknown {
-  if (SECRET_KEY_PATTERN.test(key)) return "[redacted]";
-  if (typeof value === "string") {
-    return value.length > SNAPSHOT_STRING_LIMIT ? `[redacted: ${value.length} characters]` : value;
-  }
-  if (Array.isArray(value)) {
-    return value.length > 5
-      ? `[redacted: array with ${value.length} entries]`
-      : value.map((entry) => redactValue(entry));
-  }
-  if (!value || typeof value !== "object") return value;
-
-  const redacted = Object.fromEntries(
-    Object.entries(value).map(([entryKey, entryValue]) => [
-      entryKey,
-      redactValue(entryValue, entryKey),
-    ]),
-  );
-  const redactedLength = JSON.stringify(redacted).length;
-
-  return key && redactedLength > SNAPSHOT_STRING_LIMIT
-    ? `[redacted: object with ${redactedLength} characters]`
-    : redacted;
+function buildContextSnapshot(context: unknown): string {
+  return JSON.stringify(context, null, 2);
 }
 
-function buildContextSnapshot(context: unknown): string {
-  if (!context || typeof context !== "object") return JSON.stringify(context, null, 2);
+/** Parse optional output-path arguments for dump-capable commands. */
+export function parseDumpArgs(args: string): { path?: string } {
+  const tokens = args.split(/\s+/).filter(Boolean);
+  const positional: string[] = [];
 
-  const entries = Object.entries(context).map(([key, value]) => {
-    if (key === "contextFiles") return [key, "[redacted: context file contents]"];
-    return [key, redactValue(value, key)];
-  });
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token === "--out" || token === "-o" || token === "--file") {
+      const next = tokens[index + 1];
+      if (next) {
+        positional.push(next);
+        index += 1;
+      }
+      continue;
+    }
+    if (token.startsWith("--out=")) {
+      positional.push(token.slice("--out=".length));
+      continue;
+    }
+    positional.push(token);
+  }
 
-  return JSON.stringify(Object.fromEntries(entries), null, 2);
+  const path = positional[0];
+  return path ? { path } : {};
+}
+
+async function dumpToFile(cwd: string, path: string, content: string): Promise<string> {
+  const resolved = isAbsolute(path) ? path : resolve(cwd, path);
+  await mkdir(dirname(resolved), { recursive: true });
+  await writeFile(resolved, content, "utf8");
+  return resolved;
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -280,9 +294,17 @@ async function renderCurrentPrompt(
 /** Register `/system-prompt:*` commands for preview, vars, doctor, eject, and reload. */
 export function registerSystemPromptCommands(pi: ExtensionAPI, paths: SystemPromptCommandPaths): void {
   pi.registerCommand(`${COMMAND_PREFIX}:preview`, {
-    description: "Render and preview the current system prompt template",
-    handler: async (_args, ctx) => {
+    description: "Render the system prompt template; pass a path to save it to a file",
+    handler: async (args, ctx) => {
       const rendered = await renderCurrentPrompt(pi, paths, ctx);
+      const { path } = parseDumpArgs(args);
+
+      if (path) {
+        const saved = await dumpToFile(ctx.cwd, path, rendered);
+        ctx.ui.notify(`Saved rendered system prompt (${rendered.length} characters) to ${saved}.`, "info");
+        return;
+      }
+
       if (ctx.hasUI) {
         await ctx.ui.editor("Rendered system prompt", rendered);
       } else {
@@ -292,10 +314,18 @@ export function registerSystemPromptCommands(pi: ExtensionAPI, paths: SystemProm
   });
 
   pi.registerCommand(`${COMMAND_PREFIX}:vars`, {
-    description: "Show a redacted JSON snapshot of system prompt template variables",
-    handler: async (_args, ctx) => {
+    description: "Show a JSON snapshot of system prompt template variables; pass a path to save it",
+    handler: async (args, ctx) => {
       const data = await buildCurrentTemplateData(pi, paths, ctx);
       const snapshot = buildContextSnapshot(data.context);
+      const { path } = parseDumpArgs(args);
+
+      if (path) {
+        const saved = await dumpToFile(ctx.cwd, path, snapshot);
+        ctx.ui.notify(`Saved system prompt variables (${snapshot.length} characters) to ${saved}.`, "info");
+        return;
+      }
+
       if (ctx.hasUI) {
         await ctx.ui.editor("System prompt variables", snapshot);
       } else {

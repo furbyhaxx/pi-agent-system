@@ -1,6 +1,6 @@
 {
   "name": "@furbyhaxx/pi-agent-system",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pi extension package for Handlebars-rendered SYSTEM.md templates with rich agent context and ejectable defaults.",
   "type": "module",
   "license": "MIT",

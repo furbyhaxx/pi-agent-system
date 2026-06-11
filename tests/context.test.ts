@@ -1,11 +1,17 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
-import { buildTemplateContext, sanitizeForTemplate } from "../src/context.ts";
+import {
+  buildAppendSystemEntries,
+  buildTemplateContext,
+  classifyContextFiles,
+  sanitizeForTemplate,
+} from "../src/context.ts";
 import type { BuildTemplateContextInput } from "../src/types.ts";
 
 void describe("buildTemplateContext", () => {
   void it("exposes safe runtime, model, session, tool, skill, context, and default prompt data", () => {
     const input: BuildTemplateContextInput = {
+      piPackageName: "@earendil-works/pi-coding-agent",
       piVersion: "0.79.0",
       piDocs: { readme: "/pi/README.md", docs: "/pi/docs", examples: "/pi/examples" },
       cwd: "/repo",
@@ -72,7 +78,10 @@ void describe("buildTemplateContext", () => {
           disableModelInvocation: true,
         },
       ],
-      contextFiles: [{ path: "/repo/AGENTS.md", content: "Project instructions" }],
+      contextFiles: [
+        { path: "/repo/AGENTS.md", content: "Project instructions" },
+        { path: "/agent/AGENTS.md", content: "User instructions" },
+      ],
       defaultPrompt: {
         nativeFull: "native prompt",
         parts: {
@@ -86,11 +95,34 @@ void describe("buildTemplateContext", () => {
         },
       },
       appendSystemPrompt: "Append this system prompt.",
+      agentDir: "/agent",
+      host: {
+        uname: "Linux dev 6.1.0 x86_64",
+        os: "Debian GNU/Linux 12",
+        arch: "x64",
+        hostname: "dev",
+        cpu: "Test CPU (8 cores)",
+        memory: "16 GiB",
+        shell: { name: "bash", version: "5.2" },
+        gpu: ["Test GPU 1", "Test GPU 2"],
+        env: { PATH: "/usr/bin", SSH_CONNECTION: "203.0.113.10 55555 192.0.2.5 22" },
+        remote: {
+          connected: true,
+          viaSsh: true,
+          sshConnection: "203.0.113.10 55555 192.0.2.5 22",
+          remoteAddress: "203.0.113.10",
+          hostAddress: "192.0.2.5",
+          recommendedBindAddress: "0.0.0.0",
+          hint: "SSH hint",
+        },
+      },
+      git: { isGit: true, remotes: [{ name: "origin", url: "https://example.com/repo.git" }] },
+      appendSources: [{ source: "/agent/APPEND_SYSTEM.md", content: "Append this system prompt." }],
     };
 
     const context = buildTemplateContext(input);
 
-    assert.equal(context.pi.packageName, "@furbyhaxx/pi-agent-system");
+    assert.equal(context.pi.packageName, "@earendil-works/pi-coding-agent");
     assert.equal(context.pi.version, "0.79.0");
     assert.deepEqual(context.pi.docs, input.piDocs);
     assert.equal(context.runtime.cwd, "/repo");
@@ -122,15 +154,42 @@ void describe("buildTemplateContext", () => {
       ["visible-skill"],
     );
     assert.equal(context.skills.xml, "<available_skills>visible-skill</available_skills>");
-    assert.deepEqual(context.contextFiles, [
+    assert.deepEqual(context.contextFiles.all, [
+      { path: "/repo/AGENTS.md", content: "Project instructions" },
+      { path: "/agent/AGENTS.md", content: "User instructions" },
+    ]);
+    assert.deepEqual(context.contextFiles.user, [
+      { path: "/agent/AGENTS.md", content: "User instructions" },
+    ]);
+    assert.deepEqual(context.contextFiles.project, [
       { path: "/repo/AGENTS.md", content: "Project instructions" },
     ]);
-    assert.deepEqual(context.defaultPrompt, input.defaultPrompt);
+    assert.equal(context.runtime.isGit, true);
+    assert.deepEqual(context.runtime.git.remotes, [
+      { name: "origin", url: "https://example.com/repo.git" },
+    ]);
+    assert.equal(context.host?.os, "Debian GNU/Linux 12");
+    assert.equal(context.host?.shell.name, "bash");
+    assert.deepEqual(context.host?.gpu, ["Test GPU 1", "Test GPU 2"]);
+    assert.equal(context.host?.env.SSH_CONNECTION, "203.0.113.10 55555 192.0.2.5 22");
+    assert.equal(context.host?.remote.connected, true);
+    assert.equal(context.host?.remote.recommendedBindAddress, "0.0.0.0");
     assert.equal(context.appendSystemPrompt, "Append this system prompt.");
+    assert.equal(context.appendSystem.present, true);
+    assert.equal(context.appendSystem.count, 1);
+    assert.deepEqual(context.appendSystem.entries, [
+      {
+        source: "/agent/APPEND_SYSTEM.md",
+        kind: "file",
+        content: "Append this system prompt.",
+      },
+    ]);
+    assert.deepEqual(context.defaultPrompt, input.defaultPrompt);
   });
 
   void it("normalizes runtime display values and active tool guideline defaults", () => {
     const input = {
+      piPackageName: "@earendil-works/pi-coding-agent",
       piVersion: "0.79.0",
       piDocs: { readme: "/pi/README.md", docs: "/pi/docs", examples: "/pi/examples" },
       cwd: "/repo",
@@ -191,6 +250,65 @@ void describe("buildTemplateContext", () => {
       name: "write",
       promptGuidelines: [],
     });
+  });
+});
+
+void describe("classifyContextFiles", () => {
+  void it("splits files into user and project scope by agent directory", () => {
+    const result = classifyContextFiles(
+      [
+        { path: "/agent/AGENTS.md", content: "user" },
+        { path: "/repo/AGENTS.md", content: "project" },
+        { path: "/repo/pkg/AGENTS.md", content: "nested project" },
+      ],
+      "/agent",
+    );
+
+    assert.deepEqual(
+      result.user.map((file) => file.path),
+      ["/agent/AGENTS.md"],
+    );
+    assert.deepEqual(
+      result.project.map((file) => file.path),
+      ["/repo/AGENTS.md", "/repo/pkg/AGENTS.md"],
+    );
+    assert.equal(result.all.length, 3);
+  });
+
+  void it("treats all files as project scope when no agent directory is given", () => {
+    const result = classifyContextFiles([{ path: "/repo/AGENTS.md", content: "x" }]);
+    assert.equal(result.user.length, 0);
+    assert.equal(result.project.length, 1);
+  });
+});
+
+void describe("buildAppendSystemEntries", () => {
+  void it("attributes combined text to matching source files", () => {
+    const entries = buildAppendSystemEntries("Project rules\n\nGlobal rules", [
+      { source: "/repo/.pi/APPEND_SYSTEM.md", content: "Project rules" },
+      { source: "/agent/APPEND_SYSTEM.md", content: "Global rules" },
+    ]);
+
+    assert.deepEqual(entries, [
+      { source: "/repo/.pi/APPEND_SYSTEM.md", kind: "file", content: "Project rules" },
+      { source: "/agent/APPEND_SYSTEM.md", kind: "file", content: "Global rules" },
+    ]);
+  });
+
+  void it("keeps unattributed remainder as a single inline entry", () => {
+    const entries = buildAppendSystemEntries("From file\n\nFrom extension", [
+      { source: "/agent/APPEND_SYSTEM.md", content: "From file" },
+    ]);
+
+    assert.equal(entries.length, 2);
+    assert.equal(entries[0]?.kind, "file");
+    assert.equal(entries[1]?.kind, "inline");
+    assert.equal(entries[1]?.content, "From extension");
+  });
+
+  void it("returns an empty list when there is no appended text", () => {
+    assert.deepEqual(buildAppendSystemEntries(undefined, []), []);
+    assert.deepEqual(buildAppendSystemEntries("   ", []), []);
   });
 });
 

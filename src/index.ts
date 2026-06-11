@@ -1,11 +1,12 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
 import { getDocsPath, getExamplesPath, getReadmePath } from "@earendil-works/pi-coding-agent";
 import { registerSystemPromptCommands } from "./commands.ts";
 import { DEFAULT_TEMPLATE_RELATIVE_PATH } from "./constants.ts";
 import { buildTemplateContext } from "./context.ts";
 import { buildDefaultPromptParts } from "./default-prompt.ts";
+import { discoverAppendSources, getGitContext, getHostContext } from "./environment.ts";
 import { getAgentDir, getPackageRoot, getPartialRoots } from "./paths.ts";
 import { createRenderer } from "./renderer.ts";
 import type {
@@ -53,11 +54,19 @@ function toTemplateToolContext(tool: ToolInfo): TemplateToolContext {
   };
 }
 
-async function readPackageVersion(packageRoot: string): Promise<string> {
-  const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")) as {
-    version?: unknown;
-  };
-  return typeof packageJson.version === "string" ? packageJson.version : "0.0.0";
+async function readPiPackageInfo(): Promise<{ packageName: string; version: string }> {
+  try {
+    const packageJson = JSON.parse(await readFile(join(dirname(getReadmePath()), "package.json"), "utf8")) as {
+      name?: unknown;
+      version?: unknown;
+    };
+    return {
+      packageName: typeof packageJson.name === "string" ? packageJson.name : "@earendil-works/pi-coding-agent",
+      version: typeof packageJson.version === "string" ? packageJson.version : "0.0.0",
+    };
+  } catch {
+    return { packageName: "@earendil-works/pi-coding-agent", version: "0.0.0" };
+  }
 }
 
 function templateReferences(source: string, markers: readonly string[]): boolean {
@@ -91,7 +100,12 @@ function renderCustomPromptWithNativeAppends(
 
   if (
     context.appendSystemPrompt &&
-    !templateReferences(source, ["appendSystemPrompt", "defaultPrompt.nativeFull"])
+    !templateReferences(source, [
+      "appendSystemPrompt",
+      "appendSystem",
+      "defaultPrompt.nativeFull",
+      "nukii/89-append-system-prompt",
+    ])
   ) {
     prompt += `\n\n${context.appendSystemPrompt}`;
   }
@@ -104,6 +118,7 @@ function renderCustomPromptWithNativeAppends(
       "defaultPrompt.parts.projectContextXml",
       "projectContextXml",
       "pi/project-context",
+      "nukii/90-context-files",
     ])
   ) {
     prompt += `\n\n${parts.projectContextXml}`;
@@ -118,6 +133,7 @@ function renderCustomPromptWithNativeAppends(
       "skills.all",
       "skills.visible",
       "pi/available-skills",
+      "nukii/",
     ])
   ) {
     prompt += `\n\n${parts.skillsXml}`;
@@ -130,6 +146,7 @@ function renderCustomPromptWithNativeAppends(
       "runtime.date",
       "runtime.cwd",
       "runtime/context",
+      "nukii/99-env-runtime-self",
     ])
   ) {
     prompt += `\n${parts.runtimeFooter}`;
@@ -164,8 +181,10 @@ export default function piAgentSystem(pi: ExtensionAPI): void {
         contextFiles,
         skills,
       });
+      const piPackage = await readPiPackageInfo();
       const context = buildTemplateContext({
-        piVersion: await readPackageVersion(packageRoot),
+        piPackageName: piPackage.packageName,
+        piVersion: piPackage.version,
         piDocs: {
           readme: getReadmePath(),
           docs: getDocsPath(),
@@ -187,6 +206,10 @@ export default function piAgentSystem(pi: ExtensionAPI): void {
         contextFiles,
         defaultPrompt,
         appendSystemPrompt: event.systemPromptOptions.appendSystemPrompt,
+        agentDir,
+        host: getHostContext(),
+        git: getGitContext(cwd),
+        appendSources: await discoverAppendSources({ cwd, agentDir }),
       });
       const templateSource =
         event.systemPromptOptions.customPrompt ??

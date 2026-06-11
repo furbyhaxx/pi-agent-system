@@ -1,4 +1,39 @@
 import type { ContextUsage, Skill, SourceInfo } from "@earendil-works/pi-coding-agent";
+import type { AppendSource, GitContext, GitRemote, HostContext, RemoteConnectionContext } from "./environment.ts";
+
+export type { AppendSource, GitContext, GitRemote, HostContext, RemoteConnectionContext };
+
+/** A single appended system prompt source, attributed to its origin. */
+export interface AppendSystemEntry {
+  /** Human-readable origin label (file path or inline source description). */
+  source: string;
+  /** Whether this entry came from a discovered file or an inline/runtime source. */
+  kind: "file" | "inline";
+  /** Raw appended prompt content for this entry. */
+  content: string;
+}
+
+/** Structured, iterable view of all appended system prompt content. */
+export interface AppendSystemContext {
+  /** Whether any appended content is present. */
+  present: boolean;
+  /** Combined appended prompt text exactly as Pi will append it. */
+  text: string;
+  /** Number of attributed entries. */
+  count: number;
+  /** Individual appended sources, iterable for per-source handling. */
+  entries: AppendSystemEntry[];
+}
+
+/** Project context files split by originating scope. */
+export interface ContextFilesContext {
+  /** All loaded context files, in load order. */
+  all: ProjectContextFile[];
+  /** Context files from global/user agent scope. */
+  user: ProjectContextFile[];
+  /** Context files from the project/workspace scope. */
+  project: ProjectContextFile[];
+}
 
 /** File content loaded into Pi's project context block. */
 export interface ProjectContextFile {
@@ -130,6 +165,8 @@ export interface ActiveToolTemplateContext {
 
 /** Input data used to build the full Handlebars system prompt context. */
 export interface BuildTemplateContextInput {
+  /** Pi package npm name. */
+  piPackageName: string;
   /** Pi package version string. */
   piVersion: string;
   /** Pi documentation metadata exposed to templates. */
@@ -166,6 +203,14 @@ export interface BuildTemplateContextInput {
   defaultPrompt: DefaultPromptParts;
   /** Additional system prompt text appended by Pi or extensions. */
   appendSystemPrompt?: string;
+  /** Pi global agent directory, used to classify user vs project context files. */
+  agentDir?: string;
+  /** Host machine context, when gathered. */
+  host?: HostContext;
+  /** Git status and remotes for the working directory, when gathered. */
+  git?: GitContext;
+  /** Discovered append-system-prompt source files for attribution. */
+  appendSources?: readonly AppendSource[];
 }
 
 /** Full serializable Handlebars context provided to SYSTEM.md templates. */
@@ -185,9 +230,15 @@ export interface SystemPromptTemplateContext {
     contextUsage?: ContextUsage;
     /** Display-oriented context usage strings for bundled templates. */
     contextUsageDisplay: TemplateContextUsageDisplay;
+    /** Whether the working directory is inside a git work tree. */
+    isGit: boolean;
+    /** Git remotes for the working directory. */
+    git: { remotes: readonly GitRemote[] };
   };
   /** Active model metadata, when available. */
   model?: TemplateModelContext;
+  /** Host machine context, when available. */
+  host?: HostContext;
   /** Current session metadata, when available. */
   session?: TemplateSessionContext;
   /** Tool lists, lookup tables, snippets, and guidelines. */
@@ -199,14 +250,16 @@ export interface SystemPromptTemplateContext {
     snippets: Record<string, string>;
     guidelines: readonly string[];
   };
-  /** Skill lists and formatted XML. */
+  /** Skill lists and backwards-compatible formatted XML. */
   skills: { all: readonly Skill[]; visible: readonly Skill[]; xml: string };
-  /** Project context files loaded for the prompt. */
-  contextFiles: readonly ProjectContextFile[];
+  /** Project context files loaded for the prompt, split by scope. */
+  contextFiles: ContextFilesContext;
   /** Reconstructed native default prompt sections. */
   defaultPrompt: DefaultPromptParts;
-  /** Additional system prompt text appended by Pi or extensions. */
+  /** Combined additional system prompt text appended by Pi or extensions. */
   appendSystemPrompt?: string;
+  /** Structured, iterable view of appended system prompt sources. */
+  appendSystem: AppendSystemContext;
 }
 
 /** Supported eject target scope for system prompt files. */

@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { buildEjectTargets, parseEjectArgs } from "../src/commands.ts";
+import { buildEjectTargets, parseDumpArgs, parseEjectArgs } from "../src/commands.ts";
 
 void describe("command helpers", () => {
   void it("parses project eject arguments", () => {
@@ -36,5 +36,21 @@ void describe("command helpers", () => {
         readme: join("/agent", "system-prompt", "README.md"),
       },
     );
+  });
+
+  void it("parses a bare dump path argument", () => {
+    assert.deepEqual(parseDumpArgs("out/prompt.md"), { path: "out/prompt.md" });
+  });
+
+  void it("parses --out, -o, and --file dump path flags", () => {
+    assert.deepEqual(parseDumpArgs("--out out/prompt.md"), { path: "out/prompt.md" });
+    assert.deepEqual(parseDumpArgs("-o vars.json"), { path: "vars.json" });
+    assert.deepEqual(parseDumpArgs("--file dump.txt"), { path: "dump.txt" });
+    assert.deepEqual(parseDumpArgs("--out=eq.md"), { path: "eq.md" });
+  });
+
+  void it("returns no path when no dump argument is given", () => {
+    assert.deepEqual(parseDumpArgs(""), {});
+    assert.deepEqual(parseDumpArgs("   "), {});
   });
 });

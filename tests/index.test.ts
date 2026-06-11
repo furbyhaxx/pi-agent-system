@@ -1,4 +1,7 @@
 import { strict as assert } from "node:assert";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { BeforeAgentStartEventResult, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import piAgentSystem from "../src/index.ts";
@@ -130,7 +133,7 @@ void describe("piAgentSystem", () => {
         {
           mode: "tui",
           getContextUsage: () => ({ tokens: null, contextWindow: 500000, percent: null }),
-          model: { provider: "openai-codex", contextWindow: 500000 },
+          model: { id: "gpt-5-codex", name: "GPT-5 Codex", provider: "openai-codex", input: ["text", "image"], contextWindow: 500000 },
           sessionManager: {
             getSessionId: () => "session-789",
             getSessionName: () => "Bundled prompt test",
@@ -206,7 +209,7 @@ void describe("piAgentSystem", () => {
         {
           mode: "tui",
           getContextUsage: () => ({ tokens: null, contextWindow: 500000, percent: null }),
-          model: { provider: "openai-codex", contextWindow: 500000 },
+          model: { id: "gpt-5-codex", name: "GPT-5 Codex", provider: "openai-codex", input: ["text", "image"], contextWindow: 500000 },
           sessionManager: {
             getSessionId: () => "session-env-size",
             getSessionName: () => "Env size fallback test",
@@ -328,7 +331,7 @@ void describe("piAgentSystem", () => {
         }),
         getSystemPrompt: () => "Pi native system prompt",
         getContextUsage: () => ({ tokens: null, contextWindow: 500000, percent: null }),
-        model: { provider: "openai-codex", contextWindow: 500000 },
+        model: { id: "gpt-5-codex", name: "GPT-5 Codex", provider: "openai-codex", input: ["text", "image"], contextWindow: 500000 },
         sessionManager: {
           getSessionId: () => "session-preview",
           getSessionName: () => "Preview test",
@@ -386,5 +389,124 @@ void describe("piAgentSystem", () => {
     assert.equal(notifications[0]?.level, "error");
     assert.match(notifications[0]?.message ?? "", /System prompt template doctor found issues:/);
     assert.match(notifications[0]?.message ?? "", /Render failed:/);
+  });
+
+  void it("saves the rendered prompt to a file when preview is given a path", async () => {
+    const commands = new Map<string, RegisteredCommand>();
+    const pi = {
+      on: () => undefined,
+      getActiveTools: () => ["read"],
+      getAllTools: () => [
+        { name: "read", description: "Read file contents", promptGuidelines: ["Use read."] },
+      ],
+      getThinkingLevel: () => "medium",
+      registerCommand(name: string, command: RegisteredCommand): void {
+        commands.set(name, command);
+      },
+    };
+    piAgentSystem(pi as unknown as ExtensionAPI);
+
+    const preview = commands.get("system-prompt:preview");
+    assert.ok(preview);
+
+    const dir = await mkdtemp(join(tmpdir(), "pi-agent-system-preview-"));
+    const outPath = join(dir, "nested", "prompt.md");
+    const notifications: Array<{ message: string; level?: string }> = [];
+
+    try {
+      await preview.handler(`--out ${outPath}`, {
+        cwd: process.cwd(),
+        hasUI: true,
+        mode: "tui",
+        ui: {
+          editor: () => Promise.resolve(undefined),
+          notify(message: string, level?: string): void {
+            notifications.push({ message, level });
+          },
+        },
+        getSystemPromptOptions: () => ({
+          cwd: process.cwd(),
+          selectedTools: ["read"],
+          toolSnippets: { read: "Read files" },
+        }),
+        getSystemPrompt: () => "Pi native system prompt",
+        getContextUsage: () => undefined,
+        model: { id: "m", name: "Model", provider: "prov", input: ["text"], contextWindow: 200000 },
+        sessionManager: {
+          getSessionId: () => "session-preview-file",
+          getSessionName: () => "Preview file test",
+        },
+      });
+
+      const saved = await readFile(outPath, "utf8");
+      assert.match(saved, /You are Nukii/);
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /Saved rendered system prompt/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  void it("saves a variables snapshot to a file when vars is given a path", async () => {
+    const commands = new Map<string, RegisteredCommand>();
+    const pi = {
+      on: () => undefined,
+      getActiveTools: () => ["read"],
+      getAllTools: () => [
+        { name: "read", description: "Read file contents", promptGuidelines: ["Use read."] },
+      ],
+      getThinkingLevel: () => "medium",
+      registerCommand(name: string, command: RegisteredCommand): void {
+        commands.set(name, command);
+      },
+    };
+    piAgentSystem(pi as unknown as ExtensionAPI);
+
+    const vars = commands.get("system-prompt:vars");
+    assert.ok(vars);
+
+    const dir = await mkdtemp(join(tmpdir(), "pi-agent-system-vars-"));
+    const outPath = join(dir, "vars.json");
+    const longGuideline = "x".repeat(800);
+    const notifications: Array<{ message: string; level?: string }> = [];
+
+    try {
+      await vars.handler(outPath, {
+        cwd: process.cwd(),
+        hasUI: true,
+        mode: "tui",
+        ui: {
+          editor: () => Promise.resolve(undefined),
+          notify(message: string, level?: string): void {
+            notifications.push({ message, level });
+          },
+        },
+        getSystemPromptOptions: () => ({
+          cwd: process.cwd(),
+          selectedTools: ["read"],
+          toolSnippets: { read: "Read files" },
+          promptGuidelines: [longGuideline],
+          appendSystemPrompt: "Append directive content.",
+        }),
+        getSystemPrompt: () => "Pi native system prompt",
+        getContextUsage: () => undefined,
+        model: { id: "m", name: "Model", provider: "prov", input: ["text"], contextWindow: 200000 },
+        sessionManager: {
+          getSessionId: () => "session-vars-file",
+          getSessionName: () => "Vars file test",
+        },
+      });
+
+      const saved = await readFile(outPath, "utf8");
+      const parsed = JSON.parse(saved);
+      assert.equal(parsed.appendSystemPrompt, "Append directive content.");
+      assert.equal(parsed.appendSystem.entries[0].content, "Append directive content.");
+      assert.ok(saved.includes(longGuideline), "long non-env values must not be redacted");
+      assert.equal(parsed.tools.guidelines[0], longGuideline);
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /Saved system prompt variables/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });

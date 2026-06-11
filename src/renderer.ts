@@ -9,12 +9,14 @@ const KNOWN_HELPERS = {
   with: true,
   default: true,
   json: true,
+  xml: true,
   join: true,
   eq: true,
   and: true,
   or: true,
   not: true,
   hasTool: true,
+  contains: true,
   indent: true,
   trim: true,
   lower: true,
@@ -56,6 +58,15 @@ function stringify(value: unknown): string {
   return String(value ?? "");
 }
 
+function escapeXml(value: unknown): string {
+  return stringify(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 function activeToolNames(tools: unknown): readonly string[] {
   if (Array.isArray(tools)) return tools.filter((tool): tool is string => typeof tool === "string");
   if (!tools || typeof tools !== "object" || !("active" in tools)) return [];
@@ -76,6 +87,7 @@ export async function createRenderer(
     value === undefined || value === null || value === "" ? fallback : value,
   );
   hbs.registerHelper("json", (value: unknown) => JSON.stringify(value, null, 2));
+  hbs.registerHelper("xml", (value: unknown) => escapeXml(value));
   hbs.registerHelper("join", (value: unknown, separator: unknown) => {
     const normalizedSeparator = isHelperOptions(separator) ? "\n" : stringify(separator);
     return Array.isArray(value) ? value.map(stringify).join(normalizedSeparator) : "";
@@ -87,6 +99,18 @@ export async function createRenderer(
   hbs.registerHelper("hasTool", (tools: unknown, name: unknown) =>
     typeof name === "string" && activeToolNames(tools).includes(name),
   );
+  hbs.registerHelper("contains", (haystack: unknown, needle: unknown) => {
+    if (Array.isArray(haystack)) return haystack.includes(needle);
+    if (typeof haystack === "string") return haystack.includes(stringify(needle));
+    if (haystack && typeof haystack === "object") {
+      const record = haystack as Record<string, unknown>;
+      return (
+        (typeof needle === "string" && Object.prototype.hasOwnProperty.call(record, needle)) ||
+        Object.values(record).includes(needle)
+      );
+    }
+    return false;
+  });
   hbs.registerHelper("indent", (value: unknown, spaces: unknown) => {
     const width = typeof spaces === "number" ? spaces : Number(spaces);
     const prefix = " ".repeat(Number.isFinite(width) && width > 0 ? width : 0);
